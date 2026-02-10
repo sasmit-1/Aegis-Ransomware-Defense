@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AEGIS RANSOMWARE DEFENSE</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="overlay"></div>
+
+    <div class="container">
+        <header>
+            <div class="logo">🛡️ AEGIS DEFENSE SYSTEM</div>
+            <div class="status-text">V.4.0 | CONNECTED</div>
+        </header>
+
+        <div class="status-container">
+            <div id="status-ring" class="status-ring secure">
+                <h1 id="status-text">SECURE</h1>
+                <p id="sub-status">System Protected</p>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <h3>I/O RATE (Ops/s)</h3>
+                <div class="number" id="io-rate">0</div>
+                <div class="bar-bg"><div id="io-bar" class="bar-fill" style="width: 0%;"></div></div>
+            </div>
+            <div class="metric-card">
+                <h3>ENTROPY (Shannon)</h3>
+                <div class="number" id="entropy-val">0.0</div>
+                <div class="bar-bg"><div id="ent-bar" class="bar-fill" style="width: 0%;"></div></div>
+            </div>
+            <div class="metric-card">
+                <h3>THREAT PROBABILITY</h3>
+                <div class="number" id="ai-conf">0%</div>
+                <div class="bar-bg"><div id="ai-bar" class="bar-fill" style="width: 0%;"></div></div>
+            </div>
+        </div>
+
+        <div class="score-panel" style="border: 1px solid #333; background: rgba(0,255,65,0.05); padding: 15px; text-align: left; margin-bottom: 20px; font-family: monospace;">
+            <h3 style="margin-top:0; color: #00ff41; border-bottom: 1px solid #333; padding-bottom:5px;">🧠 AI SCORING LOGIC</h3>
+            <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+                <div style="text-align: center;">
+                    <div style="color: #888; font-size: 10px;">HEURISTICS (TRUST)</div>
+                    <div id="score-heuristics" style="color: #00ff41; font-weight: bold; font-size: 20px;">10</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="color: #888; font-size: 10px;">ENTROPY (RANDOMNESS)</div>
+                    <div id="score-entropy" style="color: #00ff41; font-weight: bold; font-size: 20px;">0</div>
+                </div>
+                <div style="text-align: center;">
+                    <div style="color: #888; font-size: 10px;">BEHAVIOR (ANOMALY)</div>
+                    <div id="score-behavior" style="color: #00ff41; font-weight: bold; font-size: 20px;">0</div>
+                </div>
+            </div>
+            <p style="font-size: 10px; color: #666; margin-top: 10px; text-align: center;">* THREAT DETECTED WHEN WEIGHTED AGGREGATE > 85.0</p>
+        </div>
+
+        <div class="actions">
+            <button class="cyber-btn" id="eliminate-btn" onclick="eliminateThreat()" style="display: none; border-color: red; color: red;">
+                ☣️ ELIMINATE THREAT & RESTORE
+            </button>
+            <button class="cyber-btn" id="report-btn" onclick="generateReport()" style="display: none; border-color: cyan; color: cyan;">
+                📄 GENERATE AI FORENSIC REPORT
+            </button>
+            <button class="cyber-btn" onclick="resetSystem()">SYSTEM RESET</button>
+        </div>
+    </div>
+
+    <div id="report-modal" class="modal" style="display:none; position:fixed; top:5%; left:5%; width:90%; height:90%; background:#000; border:2px solid cyan; padding:20px; z-index:100; box-shadow: 0 0 50px rgba(0,255,255,0.2); overflow-y: auto;">
+        <h2 style="color: cyan; margin-top:0; text-align: center; border-bottom: 1px solid #333; padding-bottom: 10px;">📄 AEGIS FORENSIC REPORT</h2>
+        
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div style="display: flex; gap: 10px; height: 200px;">
+                <div style="flex: 1; border: 1px solid #333; padding: 10px;">
+                    <h4 style="color: #00ff41; margin: 0 0 10px 0;">ENTROPY ANALYSIS (Time)</h4>
+                    <canvas id="entropyChart"></canvas>
+                </div>
+                <div style="flex: 1; border: 1px solid #333; padding: 10px;">
+                    <h4 style="color: #ff0000; margin: 0 0 10px 0;">I/O SPIKE DETECTOR</h4>
+                    <canvas id="ioChart"></canvas>
+                </div>
+            </div>
+
+            <div id="report-content" style="flex: 1; border: 1px solid #333; padding: 15px; font-family: monospace; font-size: 14px; color: #ccc; line-height: 1.6;">
+                Analyzing Attack Vector...
+            </div>
+        </div>
+        
+        <button class="cyber-btn" onclick="closeReport()" style="margin-top:20px; width: 100%;">CLOSE REPORT</button>
+    </div>
+
+    <script>
+        let previousStatus = "SECURE";
+        let entropyChartInstance = null;
+        let ioChartInstance = null;
+
+        function updateStatus() {
+            fetch('/api/status')
+            .then(response => response.json())
+            .then(data => {
+                // Update Text & Bars
+                document.getElementById('io-rate').innerText = data.rate;
+                document.getElementById('io-bar').style.width = Math.min(data.rate, 100) + "%";
+                
+                document.getElementById('entropy-val').innerText = data.entropy.toFixed(2);
+                document.getElementById('ent-bar').style.width = (data.entropy * 10) + "%";
+                
+                document.getElementById('ai-conf').innerText = data.ai_conf + "%";
+                document.getElementById('ai-bar').style.width = data.ai_conf + "%";
+
+                document.getElementById('status-text').innerText = data.status;
+                document.getElementById('sub-status').innerText = data.message;
+
+                // Update Scoring Logic Panel
+                document.getElementById('score-heuristics').innerText = data.ai_score_breakdown.heuristics;
+                document.getElementById('score-entropy').innerText = data.ai_score_breakdown.entropy;
+                document.getElementById('score-behavior').innerText = data.ai_score_breakdown.behavior;
+
+                // Visual State Changes
+                const ring = document.getElementById('status-ring');
+                const killBtn = document.getElementById('eliminate-btn');
+
+                if (data.status === "DANGER") {
+                    ring.className = "status-ring danger";
+                    killBtn.style.display = "inline-block"; 
+                    previousStatus = "DANGER";
+                } else if (data.status === "WARNING") {
+                    ring.className = "status-ring warning";
+                    previousStatus = "WARNING";
+                } else {
+                    ring.className = "status-ring secure";
+                    previousStatus = "SECURE";
+                }
+
+                // STORE GRAPH DATA FOR REPORT
+                window.lastGraphData = {
+                    entropy: data.graph_entropy,
+                    io: data.graph_io
+                };
+            });
+        }
+
+        function eliminateThreat() {
+            const btn = document.getElementById('eliminate-btn');
+            btn.disabled = true;
+            btn.innerText = "PURGING...";
+            
+            fetch('/api/eliminate', { method: 'POST' })
+            .then(res => res.json())
+            .then(data => {
+                alert(data.message);
+                document.getElementById('report-btn').style.display = "inline-block";
+            });
+        }
+
+        function generateReport() {
+            document.getElementById('report-modal').style.display = "block";
+            const reportDiv = document.getElementById('report-content');
+            reportDiv.innerHTML = "Establishing Uplink with Groq Neural Net...";
+            
+            // Render Graphs immediately
+            renderGraphs();
+
+            fetch('/api/report')
+            .then(res => res.json())
+            .then(data => {
+                reportDiv.innerHTML = data.report;
+            });
+        }
+
+        function renderGraphs() {
+            const data = window.lastGraphData;
+            const labels = Array.from({length: 60}, (_, i) => i);
+
+            // Destroy old charts to prevent overlapping
+            if (entropyChartInstance) entropyChartInstance.destroy();
+            if (ioChartInstance) ioChartInstance.destroy();
+
+            // Entropy Chart
+            const ctxEnt = document.getElementById('entropyChart').getContext('2d');
+            entropyChartInstance = new Chart(ctxEnt, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Entropy Variance',
+                        data: data.entropy,
+                        borderColor: '#00ff41',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.4
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        x: { display: false }, 
+                        y: { beginAtZero: true, max: 8, grid: { color: '#222' } } 
+                    } 
+                }
+            });
+
+            // IO Chart
+            const ctxIO = document.getElementById('ioChart').getContext('2d');
+            ioChartInstance = new Chart(ctxIO, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Disk I/O',
+                        data: data.io,
+                        borderColor: '#ff0000',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.1
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } }, 
+                    scales: { 
+                        x: { display: false }, 
+                        y: { beginAtZero: true, grid: { color: '#222' } } 
+                    } 
+                }
+            });
+        }
+
+        function closeReport() {
+            document.getElementById('report-modal').style.display = "none";
+        }
+
+        function resetSystem() {
+            fetch('/api/reset', { method: 'POST' })
+            .then(() => {
+                previousStatus = "SECURE";
+                document.getElementById('report-btn').style.display = "none";
+                const killBtn = document.getElementById('eliminate-btn');
+                killBtn.disabled = false;
+                killBtn.innerText = "☣️ ELIMINATE THREAT & RESTORE";
+                killBtn.style.display = "none";
+                alert("System Reset & Network Restored");
+            });
+        }
+
+        setInterval(updateStatus, 1000);
+    </script>
+</body>
+</html>
