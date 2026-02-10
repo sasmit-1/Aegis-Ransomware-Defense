@@ -23,6 +23,7 @@ vault = ShadowVault(SAFE_ZONE_PATH)
 
 # --- GLOBAL STATE ---
 last_rollback_time = 0
+last_event_time = time.time()
 network_online = True  
 
 # History for Graphs (Max 60 points)
@@ -36,23 +37,24 @@ system_status = {
     "rate": 0,
     "ai_conf": 0.0,
     "attack_vector": "None",
-    # NEW: Granular Scoring
     "ai_score_breakdown": {
-        "heuristics": 10,  # Trust score (10 = Safe)
-        "entropy": 0,      # Randomness score
-        "behavior": 0      # Activity score
+        "heuristics": 10,
+        "entropy": 0,
+        "behavior": 0
     }
 }
 
 def start_aegis_backend():
-    global system_status, last_rollback_time, network_online, history_entropy, history_io
+    global system_status, last_rollback_time, network_online, history_entropy, history_io, last_event_time
     
     def update_brain(data_packet):
-        global system_status, last_rollback_time, network_online
+        global system_status, last_rollback_time, network_online, last_event_time
+
+        # Update the activity timer
+        last_event_time = time.time()
 
         # COOLDOWN
-        if time.time() - last_rollback_time < 10:
-            system_status.update({"status": "SECURE", "message": "Restoring...", "ai_conf": 0.0})
+        if time.time() - last_rollback_time < 3:
             return 
 
         try:
@@ -63,7 +65,7 @@ def start_aegis_backend():
             bad_header = int(parts[3].split(':')[1])
             filepath = data_packet.split('PATH:')[1].strip()
 
-            # UPDATE HISTORY FOR GRAPHS
+            # UPDATE HISTORY
             history_entropy.pop(0)
             history_entropy.append(entropy)
             history_io.pop(0)
@@ -73,8 +75,7 @@ def start_aegis_backend():
             system_status["entropy"] = entropy
             
             # --- SCORING LOGIC ---
-            # Base score (Safe)
-            score_heuristics = 10 # Baseline trust
+            score_heuristics = 10 
             score_entropy = 0
             score_behavior = 0
 
@@ -84,10 +85,8 @@ def start_aegis_backend():
             ext = ext.lower().strip() 
             low_entropy_extensions = ['.txt', '.py', '.c', '.cpp', '.java', '.html', '.css', '.js', '.md']
             
-            # Priority Lock
             current_vector = system_status.get("attack_vector", "None")
             if "Honeypot" in current_vector:
-                 # Don't overwrite high priority alerts
                  return
 
             confidence = 0.0
@@ -96,54 +95,44 @@ def start_aegis_backend():
             trigger_kill = False
             vector = "None"
 
-            # 1. TRAP CHECK (Priority 3)
             if trap == 1:
                 confidence = 100.0
                 msg = "HONEYPOT TRIGGERED!"
                 status = "DANGER"
                 vector = "Honeypot Trap (config.sys)"
                 trigger_kill = True
-                score_behavior = 90 # Max bad behavior
-
-            # 2. HEADER CORRUPTION (Priority 2)
+                score_behavior = 90
             elif bad_header == 1:
                 confidence = 95.0
                 msg = "FILE CORRUPTION (Header Mismatch)"
                 status = "DANGER"
                 vector = "Magic Byte Corruption (Zero-Day)"
                 trigger_kill = True
-                score_heuristics = 95 # High heuristics violation
-
-            # 3. STEALTH CHECK (Priority 1)
+                score_heuristics = 95
             elif ext in low_entropy_extensions and is_high_entropy:
                 confidence = 99.0
                 msg = f"ABNORMAL ENTROPY SPIKE ({ext})"
                 status = "DANGER"
                 vector = "High Entropy Anomaly (Stealth)"
                 trigger_kill = True 
-                score_entropy = 99 # High entropy violation
-
-            # 4. SAFETY FILTER
+                score_entropy = 99
             elif ext not in low_entropy_extensions and is_high_entropy and bad_header == 0:
                 confidence = 10.0
                 msg = "Verified Compressed File (Safe)"
                 status = "SECURE"
-                score_entropy = 30 # Normal high entropy
-            
+                score_entropy = 30 
             elif rate > 50: 
                 confidence = 40.0
                 msg = "High System Activity..."
                 status = "WARNING"
                 score_behavior = 50
             
-            # UPDATE SCORE BREAKDOWN
             system_status["ai_score_breakdown"] = {
                 "heuristics": score_heuristics,
-                "entropy": int(entropy * 10), # Scale 0-8 to 0-80
+                "entropy": int(entropy * 10), 
                 "behavior": score_behavior
             }
 
-            # --- EXECUTION ---
             if status == "DANGER":
                 system_status["ai_conf"] = round(confidence, 1)
                 system_status["status"] = status
@@ -154,7 +143,6 @@ def start_aegis_backend():
                     print(f"⚡ CONTAINMENT ACTIVATED: {vector}")
                     sever_connection() 
                     network_online = False 
-            
             elif system_status["status"] != "DANGER":
                 system_status["ai_conf"] = round(confidence, 1)
                 system_status["status"] = status
@@ -169,7 +157,23 @@ def start_aegis_backend():
     print(f"🛡️  AEGIS MONITORING: {SAFE_ZONE_PATH}")
     start_monitoring(SAFE_ZONE_PATH, update_brain)
     
-    while True: time.sleep(1)
+    # --- IDLE DECAY LOOP ---
+    while True: 
+        time.sleep(1)
+        # CRITICAL FIX: Only decay if we are NOT in DANGER mode.
+        # This keeps the red graph high on screen until you click "Restore".
+        if system_status["status"] != "DANGER" and (time.time() - last_event_time > 1.0):
+            # System is IDLE and SAFE -> Scroll the graph down
+            history_entropy.pop(0)
+            history_entropy.append(0.0)
+            history_io.pop(0)
+            history_io.append(0)
+            
+            system_status["entropy"] = 0.0
+            system_status["rate"] = 0
+            
+            # Reset breakdown to clean state
+            system_status["ai_score_breakdown"] = {"heuristics": 10, "entropy": 0, "behavior": 0}
 
 # --- FLASK ROUTES ---
 @app.route('/')
@@ -177,7 +181,6 @@ def index(): return render_template('index.html')
 
 @app.route('/api/status')
 def get_status(): 
-    # Add graph data to the status packet
     response = system_status.copy()
     response["graph_entropy"] = history_entropy
     response["graph_io"] = history_io
@@ -193,19 +196,22 @@ def eliminate_threat():
     last_rollback_time = time.time()
     
     if vault.restore_snapshot():
+        # Set status to SECURE. 
+        # The background loop will see "SECURE" and start scrolling the graph down naturally.
         system_status["status"] = "SECURE"
         system_status["message"] = "Threat Eliminated. System Restored."
         system_status["ai_conf"] = 0.0
-        # Do not clear vector yet (for report)
+        
         return jsonify({"success": True, "message": "System Sanitized & Restored."})
     return jsonify({"success": False, "message": "Error during restoration."})
 
 @app.route('/api/report', methods=['GET'])
 def get_ai_report():
+    # Use peak stats from history for the report
     stats = {
         "vector": system_status.get("attack_vector", "Unknown"),
-        "entropy_avg": sum(history_entropy[-10:]) / 10, # Avg of last 10 ticks
-        "io_peak": max(history_io)
+        "entropy_avg": max(history_entropy) if history_entropy else 0, 
+        "io_peak": max(history_io) if history_io else 0
     }
     report_text = generate_forensic_report(stats)
     return jsonify({"report": report_text.replace("\n", "<br>")})
@@ -213,10 +219,13 @@ def get_ai_report():
 @app.route('/api/reset', methods=['POST'])
 def reset_system():
     global system_status, network_online
+    
     system_status["status"] = "SECURE"
     system_status["message"] = "System Reset."
     system_status["ai_conf"] = 0.0
     system_status["attack_vector"] = "None"
+    system_status["entropy"] = 0.0
+    
     restore_connection()
     network_online = True 
     return jsonify({"success": True})

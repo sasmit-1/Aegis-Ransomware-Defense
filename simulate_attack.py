@@ -122,7 +122,7 @@ def run_header_attack():
 
 def run_safe_activity():
     """OPTION 5: SAFE USER SIMULATION"""
-    print("😊 SIMULATING SAFE ACTIVITY...")
+    print("SIMULATING SAFE ACTIVITY...")
     for i in range(20, 30):
         with open(f"{SAFE_ZONE}/safe_doc_{i}.txt", "w") as f:
             f.write(f"Normal work data {i}.\n" * 100)
