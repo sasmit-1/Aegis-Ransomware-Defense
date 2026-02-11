@@ -1,65 +1,59 @@
-import os
-import datetime
+import time
+import json
 from groq import Groq
 
 # --- CONFIGURATION ---
-# (Ensure your key is set here or via os.getenv)
-# API_KEY = os.getenv("GROQ_API_KEY") 
-API_KEY = "INSERT your API key HERE :)" 
+API_KEY = "insert API key" #
 
 def generate_forensic_report(stats):
     """
-    Sends attack statistics to Groq AI to generate a professional forensic report.
-    Forces HTML formatting for the Dashboard UI.
+    Generates a professional, AI-powered forensic brief using Llama-3.
     """
+    client = Groq(api_key=API_KEY) #
+    
+    # Context for the AI
+    attack_data = {
+        "timestamp": time.ctime(),
+        "vector": stats.get("vector", "Unknown"),
+        "peak_entropy": f"{stats.get('entropy_avg', 0):.2f} bits/byte",
+        "io_intensity": f"{stats.get('io_peak', 0)} ops/sec",
+        "actions_taken": ["Process Terminated", "Network Isolated", "Shadow Vault Restored"]
+    }
+
+    system_prompt = """
+    You are a Senior Cyber Forensic Analyst. 
+    Write a concise, professional 'Threat Incident Report' based on the provided technical metrics.
+    
+    Structure the report with these sections:
+    1. SUMMARY OF INCIDENT
+    2. TECHNICAL ANALYSIS (Explain what high entropy or magic byte corruption implies)
+    3. REMEDIATION (Confirm that the system is now clean)
+    
+    Use a technical, authoritative tone suitable for a Security Operations Center (SOC).
+    Keep it under 200 words.
+    """
+
     try:
-        client = Groq(api_key=API_KEY)
-        
-        # 1. Get Real-Time Timestamp
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # 2. Construct the Prompt with HTML Instructions
-        # We explicitly tell Llama to use <b> for bold and <br> for line breaks.
-        system_prompt = f"""
-        You are a Cybersecurity Forensic Analyst for AEGIS Defense Systems.
-        
-        DATA:
-        - THREAT VECTOR: {stats.get('vector')}
-        - DETECTED ENTROPY: {stats.get('entropy_avg')} (Normal < 5.0)
-        - PEAK I/O RATE: {stats.get('io_peak')} ops/sec
-        - TIME OF INCIDENT: {current_time}
-        
-        CRITICAL INSTRUCTION: 
-        Return the response using HTML tags for formatting. 
-        Do NOT use Markdown (like **bold**). Use <b> for bold and <br> for new lines.
-        
-        REQUIRED OUTPUT FORMAT:
-        <b>INCIDENT SUMMARY:</b><br>
-        [One sentence describing the attack type and time]<br><br>
-        
-        <b>TECHNICAL ANALYSIS:</b><br>
-        [Explain why Entropy {stats.get('entropy_avg')} confirms malicious encryption. Mention the I/O spike.]<br><br>
-        
-        <b>COUNTERMEASURES TAKEN:</b><br>
-        Threat process terminated. Network isolation protocols engaged. System snapshot restored.
-        """
-
-        # 3. Call the AI
         chat_completion = client.chat.completions.create(
             messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt,
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"DATA: {json.dumps(attack_data)}"}
             ],
-            # Use Llama 3.3 for the best results, or 3.1-70b if 3.3 is unavailable
-            model="llama-3.3-70b-versatile",
-            temperature=0.3, # Lower temp keeps the formatting strict
-            max_tokens=1024, 
+            model="llama-3.1-8b-instant", #
+            temperature=0.3,
         )
 
-        return chat_completion.choices[0].message.content
+        ai_report = chat_completion.choices[0].message.content
+        return ai_report
 
     except Exception as e:
-        # Fallback Logic (Returns HTML error message)
-        return f"<b>⚠ UPLINK ERROR:</b><br>Could not reach Neural Net.<br><i>Error: {str(e)}</i>"
+        # Fallback if the API fails or internet is cut
+        return f"""
+        AEGIS FALLBACK REPORT
+        ---------------------
+        TIMESTAMP: {attack_data['timestamp']}
+        VECTOR: {attack_data['vector']}
+        METRICS: Entropy {attack_data['peak_entropy']} | I/O {attack_data['io_intensity']}
+        STATUS: Threat Neutralized via Local Heuristics.
+        ERROR: AI Uplink Unavailable.
+        """

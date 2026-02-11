@@ -4,160 +4,165 @@ import random
 import sys
 
 # --- CONFIGURATION ---
-# Get the folder where this script lives (which is .../ADG/)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-# TARGET THE SAFE_ZONE DIRECTLY NEXT TO THE SCRIPT
 SAFE_ZONE = os.path.join(BASE_DIR, "SafeZone")
 TRAP_FILE = os.path.join(SAFE_ZONE, "config.sys")
 
+# Skip headers to bypass Heuristics (for Mode 2)
+HEADER_SKIP_SIZE = 128 
+
 def ensure_safezone_exists():
-    """Just checks if the folder exists. Does NOT create files automatically."""
     if not os.path.exists(SAFE_ZONE):
         os.makedirs(SAFE_ZONE)
-        print(f"📁 Created SafeZone directory at: {SAFE_ZONE}")
 
 def reset_files():
-    """
-    MANUAL RESET: Creates the clean files needed for the demo.
-    """
     ensure_safezone_exists()
-    print(f"🔄 SYSTEM RESET: Restoring clean files in {SAFE_ZONE}...")
+    print(f"\n🔄 SYSTEM RESET: Wiping & Restoring clean files in {SAFE_ZONE}...")
     
-    # Clean up old trap
-    if os.path.exists(TRAP_FILE):
-        try: os.remove(TRAP_FILE)
+    for f in os.listdir(SAFE_ZONE):
+        path = os.path.join(SAFE_ZONE, f)
+        try:
+            if os.path.isfile(path): os.remove(path)
         except: pass
 
-    # The Standard File Set
-    files = {
-        "financial_records.txt": "Account: 123456789\nBalance: $1,000,000\n" * 50, 
-        "backend_code.py": "def connect_db():\n    return True\n" * 50,       
-        "project_notes.md": "# Q1 Goals\n- Increase revenue\n- Fix bugs\n" * 50, 
-        "family_photo.jpg": b"\xFF\xD8\xFF\xE0" + (b"\x00" * 1000), 
-        "config.sys": "SYSTEM_BOOT_LOADER=1" 
-    }
+    base_content = b"CONFIDENTIAL DATA - TOP SECRET - DO NOT SHARE " * 500
+    print("✨ Generating 20 victim files with VALID HEADERS...")
     
-    for name, content in files.items():
-        path = os.path.join(SAFE_ZONE, name)
-        mode = "wb" if isinstance(content, bytes) else "w"
-        with open(path, mode) as f:
-            f.write(content)
+    # MAGIC BYTES FOR REALISM
+    PDF_HEADER = b"%PDF-1.5\n"
+    XLSX_HEADER = b"PK\x03\x04" + (b"\x00" * 20)
+    SQL_HEADER = b"SQLite format 3\x00"
     
+    for i in range(1, 6):
+        with open(os.path.join(SAFE_ZONE, f"financial_record_0{i}.xlsx"), "wb") as f:
+            f.write(XLSX_HEADER + base_content + f"\nRow {i}: Account 49281-992".encode())
+
+    for i in range(1, 6):
+        with open(os.path.join(SAFE_ZONE, f"project_blueprint_v{i}.pdf"), "wb") as f:
+            f.write(PDF_HEADER + base_content + f"\nLayer {i}: Architecture Schema".encode())
+
+    for i in range(1, 6):
+        with open(os.path.join(SAFE_ZONE, f"client_database_shard_{i}.db"), "wb") as f:
+            f.write(SQL_HEADER + base_content + f"\nDB Shard {i}: Active Clients".encode())
+
+    for i in range(1, 6):
+        with open(os.path.join(SAFE_ZONE, f"hr_employee_data_part{i}.csv"), "wb") as f:
+            f.write(base_content + f"\nID,Name,Salary\n{i},John Doe,100000".encode())
+
+    # THE HONEYPOT
+    with open(TRAP_FILE, "w") as f:
+        f.write("SYSTEM_BOOT=1")
+
     if os.path.exists("malware.pid"):
         try: os.remove("malware.pid")
         except: pass
         
-    print("✅ SafeZone Restored.")
+    print(f"✅ RESET COMPLETE. 20 Files ready for attack.\n")
 
 def safe_activity():
-    print("🟢 MODE 1: SAFE ACTIVITY (User Working)...")
-    if not os.path.exists(SAFE_ZONE):
-        print("⚠ ERROR: SafeZone missing! Run '0' first.")
-        return
+    print("\n🟢 MODE 1: SAFE ACTIVITY (User Working)...")
+    if not os.path.exists(SAFE_ZONE) or not os.listdir(SAFE_ZONE):
+        reset_files()
 
-    print(" -> Writing normal log files...")
+    print(" -> Writing normal log files (Safe Traffic)...")
     for i in range(5):
         with open(os.path.join(SAFE_ZONE, "app_log.txt"), "a") as f:
-            f.write(f"Log entry {i}: System normal at {time.time()}\n")
+            f.write(f"Log entry {i}: System normal at {time.time()} - Operations stable.\n")
         time.sleep(0.5)
-        print(f" -> Log Update {i+1}/5")
+        print(f"   -> Log Update {i+1}/5")
+    print("✅ Safe Activity Complete.")
 
-def full_encryption_attack():
-    print("💀 MODE 2: MASS ENCRYPTION (LockBit Style)...")
+def haywire_attack():
+    # Formerly "Smart Encryption". This is the Noisy one.
+    print("\n💀 MODE 2: HAYWIRE RANSOMWARE (Mass Encryption)...")
     
-    # Only target existing files
-    if not os.path.exists(SAFE_ZONE): return
+    if not os.path.exists(SAFE_ZONE) or not os.listdir(SAFE_ZONE):
+        reset_files()
+        time.sleep(1)
+
     files = [f for f in os.listdir(SAFE_ZONE) if f != "config.sys" and f != "malware.pid"]
+    print(f" -> LOCKING ALL {len(files)} FILES RAPIDLY...")
     
-    if not files:
-        print("⚠ No files found to encrypt. Run '0' to Reset first.")
-        return
-
     for fname in files:
         fpath = os.path.join(SAFE_ZONE, fname)
         if os.path.isfile(fpath):
-            print(f" -> Encrypting: {fname}")
-            size = os.path.getsize(fpath)
-            with open(fpath, "wb") as f:
-                f.write(os.urandom(max(1024, size))) 
-            time.sleep(0.2) 
+            print(f"   🔥 ENCRYPTING: {fname}")
+            try:
+                with open(fpath, "rb") as f:
+                    data = f.read()
+                
+                # Keep Header (Stealthy against Heuristics) but HIGH ENTROPY (Noisy)
+                header = data[:HEADER_SKIP_SIZE]
+                encrypted_body = os.urandom(len(data) - HEADER_SKIP_SIZE)
+                final_data = header + encrypted_body
 
-def header_corruption_attack():
-    print("🧬 MODE 3: ZERO-DAY MUTATION (Header Destroy)...")
-    
-    if not os.path.exists(SAFE_ZONE): return
-    files = [f for f in os.listdir(SAFE_ZONE) if f.endswith(".jpg")]
-    
-    if not files:
-        print("⚠ No JPGs found. Run '0' to Reset first.")
-        return
+                with open(fpath, "wb") as f:
+                    f.write(final_data)
+            except Exception as e: 
+                pass
+            
+            # FAST IO (0.1s)
+            time.sleep(0.1) 
 
+    print("💀 HAYWIRE ATTACK COMPLETE. ENTROPY SPIKED.")
+
+def corruption_attack():
+    print("\n🧬 MODE 3: ZERO-DAY MUTATION (Header Destroy)...")
+    if not os.path.exists(SAFE_ZONE): reset_files()
+    
+    files = [f for f in os.listdir(SAFE_ZONE) if f.endswith(".pdf") or f.endswith(".xlsx")]
+    
     for fname in files:
         fpath = os.path.join(SAFE_ZONE, fname)
-        print(f" -> Corrupting DNA: {fname}")
-        with open(fpath, "wb") as f:
-            f.write(b"\x00\x00\x00\x00" + os.urandom(100)) 
+        print(f"   -> Corrupting File Header: {fname}")
+        with open(fpath, "r+b") as f:
+            f.write(b"\x00\xFF\x00\xFF" * 10) 
         time.sleep(0.5)
+    print("🧬 CORRUPTION COMPLETE.")
 
-def stealth_honeypot_attack():
-    print("🥷 MODE 4: STEALTH/WORM (Hunting for System Files)...")
+def smart_stealth_attack():
+    # Formerly "Stealth". This is the Smart/Targeted one.
+    print("\n🥷 MODE 4: SMART STEALTH ATTACK (Targeting Criticals)...")
+    if not os.path.exists(SAFE_ZONE): reset_files()
     
-    if not os.path.exists(SAFE_ZONE):
-        print("⚠ SafeZone missing. Run '0' first.")
-        return
-
-    print(" -> Scanning directory for system configs...")
-    time.sleep(0.5) 
+    print(" -> Analyzing file system structure...")
+    time.sleep(1.0) 
+    print(" -> Skipping low-value assets (Logs, Temp)...")
+    time.sleep(0.5)
+    print(" -> 🎯 CRITICAL ASSET FOUND: config.sys")
+    time.sleep(0.5)
+    print(f" -> ⚡ INJECTING PAYLOAD INTO: {TRAP_FILE}")
     
-    print(f" -> ⚡ INJECTING ROOTKIT: {TRAP_FILE}")
     with open(TRAP_FILE, "wb") as f:
         f.write(b"MALICIOUS_PAYLOAD_INJECTED")
-            
-    time.sleep(1.0)
-    print(" -> Attempting to spread to other files...")
+        
+    print(" -> Smart Attack Complete. (Trap Triggered).")
 
 def main():
-    # Save PID for the Assassin
     with open("malware.pid", "w") as f:
         f.write(str(os.getpid()))
 
     while True:
-        print("\n--- 🛡️ AEGIS SIMULATION CONTROL 🛡️ ---")
-        print(f"TARGET: {SAFE_ZONE}")
-        print("0. Reset SafeZone (Restore Clean Files)")
-        print("1. Safe Activity (Green Graphs)")
-        print("2. Mass Encryption (Entropy Attack)")
-        print("3. Header Corruption (Heuristic Attack)")
-        print("4. Stealth Attack (Honeypot Trap)")
+        print("\n" + "="*50)
+        print("   🦠 MALWARE SIMULATOR V3.0 (NARRATIVE EDITION)   ")
+        print("="*50)
+        print("0. RESET (Clean Slate)")
+        print("1. Safe Activity")
+        print("2. HAYWIRE RANSOMWARE (High Entropy / Noisy)")
+        print("3. ZERO-DAY MUTATION (Header Corruption)")
+        print("4. SMART STEALTH ATTACK (Targeting Config.sys)")
         print("Q. Quit")
         
-        choice = input("\nSelect Command: ").lower()
+        choice = input("\nSelect Action [0-4]: ").lower()
 
         try:
-            if choice == '0':
-                reset_files()
-            elif choice == '1':
-                safe_activity()
-            elif choice == '2':
-                full_encryption_attack()
-                break 
-            elif choice == '3':
-                header_corruption_attack()
-                break
-            elif choice == '4':
-                stealth_honeypot_attack()
-                break
-            elif choice == 'q':
-                break
-            else:
-                print("Invalid selection.")
-                
-        except KeyboardInterrupt:
-            print("\n🛑 Simulation Stopped.")
-            break
-        except Exception as e:
-            print(f"⚠ Error: {e}")
+            if choice == '0': reset_files()
+            elif choice == '1': safe_activity()
+            elif choice == '2': haywire_attack()
+            elif choice == '3': corruption_attack()
+            elif choice == '4': smart_stealth_attack()
+            elif choice == 'q': break
+        except: break
 
 if __name__ == "__main__":
     main()

@@ -1,94 +1,65 @@
 import os
 import subprocess
-import signal
-import sys
+import psutil
+
+# --- CONFIGURATION ---
+# REPLACE THIS with your exact adapter name from Control Panel
+ADAPTER_NAME = "Wi-Fi" 
 
 def sever_connection():
     """
-    Disables the network adapter to prevent data exfiltration.
-    Uses 'netsh' commands on Windows.
+    Called by AI Detection -> Disables Wi-Fi to stop data leak.
     """
+    print(f"\n⚡ KILL SWITCH ENGAGED: DISABLING {ADAPTER_NAME}...")
     try:
-        # 1. Disable Wi-Fi
+        # Windows command to disable the adapter
         subprocess.run(
-            ["netsh", "interface", "set", "interface", "Wi-Fi", "admin=disable"], 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL
+            f'netsh interface set interface "{ADAPTER_NAME}" admin=disable', 
+            shell=True, check=True
         )
-        
-        # 2. Disable Ethernet (just in case)
-        subprocess.run(
-            ["netsh", "interface", "set", "interface", "Ethernet", "admin=disable"], 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL
-        )
-        print("🚫 NETWORK SEVERED: Kill-Switch Engaged.")
-        
+        return True
     except Exception as e:
-        print(f"⚠️ Network Kill Failed: {e}")
+        print(f"❌ KILL FAILED: Run as Admin! Error: {e}")
+        return False
 
 def restore_connection():
     """
-    Re-enables the network adapter after the threat is eliminated.
+    Called by 'Eliminate Threat' -> Re-enables Wi-Fi.
     """
+    print(f"✅ AEGIS: RESTORING {ADAPTER_NAME}...")
     try:
-        # 1. Enable Wi-Fi
+        # Windows command to enable the adapter
         subprocess.run(
-            ["netsh", "interface", "set", "interface", "Wi-Fi", "admin=enable"], 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL
+            f'netsh interface set interface "{ADAPTER_NAME}" admin=enable', 
+            shell=True, check=True
         )
-        
-        # 2. Enable Ethernet
-        subprocess.run(
-            ["netsh", "interface", "set", "interface", "Ethernet", "admin=enable"], 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL
-        )
-        print("✅ NETWORK RESTORED: Systems Online.")
-        
+        return True
     except Exception as e:
-        print(f"⚠️ Network Restore Failed: {e}")
+        print(f"❌ RESTORE FAILED: {e}")
+        return False
 
-def kill_malware_process(pid=None):
+def kill_malware_process():
     """
-    Kills the malware process. 
-    Gracefully handles cases where the process is already dead (WinError 87).
+    Terminates the malware process ID.
     """
-    print(f"🔫 ASSASSIN ACTIVATED...")
+    print("⚔️ AEGIS: KILLING MALWARE PROCESS...")
+    
+    # 1. Kill by PID file
+    if os.path.exists("malware.pid"):
+        try:
+            with open("malware.pid", "r") as f:
+                pid = int(f.read().strip())
+            psutil.Process(pid).terminate()
+            print(f"💀 TERMINATED PID: {pid}")
+            os.remove("malware.pid")
+        except: 
+            pass
 
-    try:
-        # METHOD 1: Kill by Specific PID (Precision Strike)
-        if pid:
-            try:
-                os.kill(int(pid), signal.SIGTERM)
-                print(f"✅ Threat Process {pid} Terminated.")
-                return
-            except OSError:
-                # This catches WinError 87 (Process not found / Already dead)
-                print("✅ Target already eliminated (Self-Terminated).")
-                return
-
-        # METHOD 2: Kill by Name (Carpet Bombing)
-        # We forcefully kill any python script named 'simulate_attack.py'
-        # just to be absolutely sure nothing is left running.
-        subprocess.run(
-            ["taskkill", "/F", "/IM", "simulate_attack.py"], 
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL
-        )
-        
-        # Also try killing the specific command line if possible (Advanced)
-        subprocess.run(
-            'wmic process where "CommandLine like \'%simulate_attack%\'" call terminate',
-            shell=True,
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL
-        )
-        
-        print("✅ Threat neutralization complete.")
-
-    except Exception as e:
-        # If it fails, we assume the threat is gone anyway.
-        # We print a success message to keep the demo looking clean.
-        print(f"✅ Threat neutralized. (System Safe)")
+    # 2. Kill by Name (Safety Net)
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            cmd = " ".join(proc.info['cmdline'] or []).lower()
+            if "simulate_attack.py" in cmd:
+                print(f"💀 FOUND & TERMINATED: {proc.info['pid']}")
+                proc.terminate()
+        except: pass
