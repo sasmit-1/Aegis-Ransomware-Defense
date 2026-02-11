@@ -1,147 +1,169 @@
 import os
 import time
 import random
-import shutil
+import sys
 
-# --- ABSOLUTE PATH SETUP ---
+# --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SAFE_ZONE = os.path.join(BASE_DIR, "SafeZone")
-HONEYPOT_FILE = os.path.join(SAFE_ZONE, "config.sys")
 
-HEADERS = {
-    'pdf': b'%PDF-1.4',
-    'jpg': b'\xFF\xD8\xFF\xE0',
-    'zip': b'PK\x03\x04'
-}
+# Fix for "Ghost Folder" - ensures we hit the right path
+if os.path.basename(BASE_DIR) == "ADG":
+    SAFE_ZONE = os.path.join(BASE_DIR, "SafeZone")
+else:
+    SAFE_ZONE = os.path.join(BASE_DIR, "ADG", "SafeZone")
 
-def save_pid():
-    """
-    CRITICAL: SAVES THE MALWARE'S ID SO AEGIS CAN KILL IT.
-    Real malware hides this, but for the demo, we broadcast it.
-    """
-    pid = os.getpid()
-    with open("malware.pid", "w") as f:
-        f.write(str(pid))
-    print(f"👻 MALWARE PROCESS STARTED [PID: {pid}]")
+TRAP_FILE = os.path.join(SAFE_ZONE, "config.sys")
 
-def clean_safe_zone():
-    """Helper to EMPTY the folder without deleting it."""
+def ensure_folder_exists():
+    """Only creates the directory if missing. Does NOT create files."""
     if not os.path.exists(SAFE_ZONE):
-        os.mkdir(SAFE_ZONE)
+        os.makedirs(SAFE_ZONE)
+        print(f"📁 Created SafeZone directory at: {SAFE_ZONE}")
+
+def reset_files():
+    """
+    MANUAL ONLY: Populates SafeZone with clean files for the demo.
+    Run this BEFORE starting app.py.
+    """
+    ensure_folder_exists()
+    print(f"🔄 SYSTEM RESET: Creating clean environment in {SAFE_ZONE}...")
+    
+    # Clean up old trap
+    if os.path.exists(TRAP_FILE):
+        try: os.remove(TRAP_FILE)
+        except: pass
+
+    # The file set
+    files = {
+        "financial_records.txt": "Account: 123456789\nBalance: $1,000,000\n" * 50, 
+        "backend_code.py": "def connect_db():\n    return True\n" * 50,       
+        "project_notes.md": "# Q1 Goals\n- Increase revenue\n- Fix bugs\n" * 50, 
+        "family_photo.jpg": b"\xFF\xD8\xFF\xE0" + (b"\x00" * 1000), # Fake JPG
+        "config.sys": "SYSTEM_BOOT_LOADER=1" # Clean Trap
+    }
+    
+    for name, content in files.items():
+        path = os.path.join(SAFE_ZONE, name)
+        mode = "wb" if isinstance(content, bytes) else "w"
+        with open(path, mode) as f:
+            f.write(content)
+    
+    # Clean up PID
+    if os.path.exists("malware.pid"):
+        try: os.remove("malware.pid")
+        except: pass
+        
+    print("✅ SafeZone Populated. You can now start app.py.")
+
+def safe_activity():
+    print("🟢 MODE 1: SAFE ACTIVITY (User Working)...")
+    if not os.path.exists(SAFE_ZONE) or not os.listdir(SAFE_ZONE):
+        print("⚠ ERROR: SafeZone is empty! Run '0' to create files first.")
         return
 
-    for filename in os.listdir(SAFE_ZONE):
-        file_path = os.path.join(SAFE_ZONE, filename)
-        try:
-            if os.path.isfile(file_path) or os.path.islink(file_path):
-                os.unlink(file_path)
-            elif os.path.isdir(file_path):
-                shutil.rmtree(file_path)
-        except Exception as e:
-            print(f"Failed to delete {file_path}. Reason: {e}")
-
-def create_dummy_files():
-    """OPTION 1: RESET & PREP"""
-    print(f"🔄 Resetting {SAFE_ZONE}...")
-    clean_safe_zone()
-
-    # Create Honeypot
-    with open(HONEYPOT_FILE, "w") as f:
-        f.write("SYSTEM_CONFIGURATION_DO_NOT_TOUCH")
-
-    # Create Text Files
-    for i in range(10):
-        with open(f"{SAFE_ZONE}/doc_{i}.txt", "w") as f:
-            f.write(f"This is meaningful text file number {i}.\n" * 50)
-            
-    # Create Fake PDF/JPG
+    print(" -> Writing normal log files...")
     for i in range(5):
-        with open(f"{SAFE_ZONE}/image_{i}.pdf", "wb") as f:
-            f.write(HEADERS['pdf'] + os.urandom(1024))
-        with open(f"{SAFE_ZONE}/photo_{i}.jpg", "wb") as f:
-            f.write(HEADERS['jpg'] + os.urandom(1024))
+        with open(os.path.join(SAFE_ZONE, "app_log.txt"), "a") as f:
+            f.write(f"Log entry {i}: System normal at {time.time()}\n")
+        time.sleep(0.5)
+        print(f" -> Log Update {i+1}/5")
 
-    print("✅ System Ready.")
-
-def run_ransomware():
-    """OPTION 2: THE NOISY ATTACK (Trap + Encryption)"""
-    print("💀 RUNNING RANSOMWARE (Max Aggression)...")
+def full_encryption_attack():
+    print("💀 MODE 2: MASS ENCRYPTION (LockBit Style)...")
     
-    # 1. Trip the Trap
-    print(f"🧨 Touching Honeypot: {HONEYPOT_FILE}")
-    with open(HONEYPOT_FILE, "a") as f:
-        f.write("INFECTED")
+    if not os.path.exists(SAFE_ZONE):
+        print("⚠ ERROR: SafeZone missing! Run '0' first.")
+        return
+
+    # Filter out system files
+    files = [f for f in os.listdir(SAFE_ZONE) if f != "config.sys" and f != "malware.pid"]
+    
+    if not files:
+        print("⚠ ERROR: No files to encrypt! Run '0' to reset.")
+        return
+
+    for fname in files:
+        fpath = os.path.join(SAFE_ZONE, fname)
+        if os.path.isfile(fpath):
+            print(f" -> Encrypting: {fname}")
+            size = os.path.getsize(fpath)
+            with open(fpath, "wb") as f:
+                f.write(os.urandom(max(1024, size))) 
+            time.sleep(0.2) 
+
+def header_corruption_attack():
+    print("🧬 MODE 3: ZERO-DAY MUTATION (Header Destroy)...")
+    
+    if not os.path.exists(SAFE_ZONE): return
+    files = [f for f in os.listdir(SAFE_ZONE) if f.endswith(".jpg")]
+    
+    if not files:
+        print("⚠ ERROR: No JPGs found! Run '0' to reset.")
+        return
+
+    for fname in files:
+        fpath = os.path.join(SAFE_ZONE, fname)
+        print(f" -> Corrupting DNA: {fname}")
+        with open(fpath, "wb") as f:
+            f.write(b"\x00\x00\x00\x00" + os.urandom(100)) 
+        time.sleep(0.5)
+
+def stealth_honeypot_attack():
+    print("🥷 MODE 4: STEALTH/WORM (Hunting for System Files)...")
+    print(" -> Scanning directory for system configs...")
+    time.sleep(0.5) 
+    
+    # Targets the trap directly
+    print(f" -> ⚡ INJECTING ROOTKIT: {TRAP_FILE}")
+    with open(TRAP_FILE, "wb") as f:
+        f.write(b"MALICIOUS_PAYLOAD_INJECTED")
+            
+    time.sleep(1.0)
+    print(" -> Attempting to spread to other files...")
+
+def main():
+    # Write PID for Assassin
+    with open("malware.pid", "w") as f:
+        f.write(str(os.getpid()))
+
+    ensure_folder_exists()
+    
+    while True:
+        print("\n--- 🛡️ AEGIS SIMULATION CONTROL 🛡️ ---")
+        print(f"TARGET: {SAFE_ZONE}")
+        print("0. Reset SafeZone (Create/Restore Files)")
+        print("1. Safe Activity (Green Graphs)")
+        print("2. Mass Encryption (Entropy Attack)")
+        print("3. Header Corruption (Heuristic Attack)")
+        print("4. Stealth Attack (Honeypot Trap)")
+        print("Q. Quit")
         
-    # 2. Encrypt Everything
-    files = [f for f in os.listdir(SAFE_ZONE) if os.path.isfile(os.path.join(SAFE_ZONE, f))]
-    for file in files:
-        if "config.sys" in file.lower(): continue
-        
-        try:
-            path = os.path.join(SAFE_ZONE, file)
-            with open(path, "rb") as f: data = f.read()
-            
-            # XOR Encryption
-            encrypted = bytearray([b ^ 0xFF for b in data])
-            
-            with open(path, "wb") as f: f.write(encrypted)
-            print(f"🔒 Encrypted: {file}")
-            
-            # SLOW DOWN TO BUILD TENSION (Was 0.05)
-            # This allows the user to see the attack happening before killing it.
-            time.sleep(0.3) 
-        except: pass
+        choice = input("\nSelect Command: ").lower()
 
-def run_stealth_attack():
-    """OPTION 3: STEALTH ATTACK (Entropy Only)"""
-    print("🕵️ RUNNING STEALTH ATTACK...")
-    files = [f for f in os.listdir(SAFE_ZONE) if f.endswith(".txt")]
-    for file in files:
         try:
-            path = os.path.join(SAFE_ZONE, file)
-            # Overwrite with random bytes
-            with open(path, "wb") as f: f.write(os.urandom(2048))
-            print(f"⚠️  Corrupted: {file}")
-            time.sleep(1.5) 
-        except: pass
-
-def run_header_attack():
-    """OPTION 4: ZERO-DAY ATTACK (Header Corruption)"""
-    print("🎭 RUNNING HEADER ATTACK...")
-    files = [f for f in os.listdir(SAFE_ZONE) if f.endswith(".pdf") or f.endswith(".jpg")]
-    for file in files:
-        try:
-            path = os.path.join(SAFE_ZONE, file)
-            # Overwrite header
-            with open(path, "r+b") as f:
-                f.seek(0)
-                f.write(b'GARBAGE!!!')
-            print(f"🚫 Corrupted Header: {file}")
-            time.sleep(1.0)
-        except: pass
-
-def run_safe_activity():
-    """OPTION 5: SAFE USER SIMULATION"""
-    print("SIMULATING SAFE ACTIVITY...")
-    for i in range(20, 30):
-        with open(f"{SAFE_ZONE}/safe_doc_{i}.txt", "w") as f:
-            f.write(f"Normal work data {i}.\n" * 100)
-        print(f"📄 Created Safe Text: safe_doc_{i}.txt")
-        time.sleep(0.1)
+            if choice == '0':
+                reset_files()
+            elif choice == '1':
+                safe_activity()
+            elif choice == '2':
+                full_encryption_attack()
+                break 
+            elif choice == '3':
+                header_corruption_attack()
+                break
+            elif choice == '4':
+                stealth_honeypot_attack()
+                break
+            elif choice == 'q':
+                break
+            else:
+                print("Invalid selection.")
+                
+        except KeyboardInterrupt:
+            print("\n🛑 Simulation Stopped.")
+            break
+        except Exception as e:
+            print(f"⚠ Error: {e}")
 
 if __name__ == "__main__":
-    save_pid() # <--- REGISTER AS MALWARE FIRST
-    
-    print("\n--- 🛡️ AEGIS ULTIMATE SIMULATOR 🛡️ ---")
-    print("1. RESET SYSTEM")
-    print("2. RANSOMWARE (Trap + Encryption)")
-    print("3. STEALTH (Context-Aware)")
-    print("4. ZERO-DAY (Header Attack)")
-    print("5. SAFE ACTIVITY")
-    
-    choice = input("\nSelect (1-5): ")
-    if choice == "1": create_dummy_files()
-    elif choice == "2": run_ransomware()
-    elif choice == "3": run_stealth_attack()
-    elif choice == "4": run_header_attack()
-    elif choice == "5": run_safe_activity()
+    main()
