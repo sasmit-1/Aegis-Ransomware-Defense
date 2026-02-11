@@ -1,46 +1,65 @@
 import os
+import datetime
 from groq import Groq
-from core.network_kill import restore_connection
-import time
 
-API_KEY = "insert API key here :)"  
+# --- CONFIGURATION ---
+# (Ensure your key is set here or via os.getenv)
+# API_KEY = os.getenv("GROQ_API_KEY") 
+API_KEY = "INSERT your API key HERE :)" 
 
 def generate_forensic_report(stats):
-    print("📝 ESTABLISHING SECURE UPLINK TO GROQ CLOUD...")
-    
-    # 1. Restore Internet so we can talk to the AI
-    restore_connection()
-    
-    # 2. Handshake Wait
-    time.sleep(2) 
-
+    """
+    Sends attack statistics to Groq AI to generate a professional forensic report.
+    Forces HTML formatting for the Dashboard UI.
+    """
     try:
         client = Groq(api_key=API_KEY)
         
-        # New Shorter, Punchy Prompt
-        prompt = f"""
-        ACT AS: A Military-Grade Cybersecurity Analyst (Aegis System).
-        TASK: Write a SHORT, punchy Incident Report (Max 150 words).
+        # 1. Get Real-Time Timestamp
+        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 2. Construct the Prompt with HTML Instructions
+        # We explicitly tell Llama to use <b> for bold and <br> for line breaks.
+        system_prompt = f"""
+        You are a Cybersecurity Forensic Analyst for AEGIS Defense Systems.
         
         DATA:
-        - Detected Vector: {stats.get('vector')}
-        - Peak Entropy: {stats.get('entropy_avg', 0)} (Normal < 5.0)
-        - IO Spike: {stats.get('io_peak', 0)} ops/s
+        - THREAT VECTOR: {stats.get('vector')}
+        - DETECTED ENTROPY: {stats.get('entropy_avg')} (Normal < 5.0)
+        - PEAK I/O RATE: {stats.get('io_peak')} ops/sec
+        - TIME OF INCIDENT: {current_time}
         
-        REQUIRED SECTIONS (Use HTML <h3> for headers):
-        1. <h3>Threat Identification</h3> (One sentence on what was caught, mention MITRE T-Code if applicable).
-        2. <h3>Technical Analysis</h3> (Explain why the entropy or IO spike confirms the attack).
-        3. <h3>Countermeasures</h3> (Confirm "Process Terminated" and "Network Severed").
+        CRITICAL INSTRUCTION: 
+        Return the response using HTML tags for formatting. 
+        Do NOT use Markdown (like **bold**). Use <b> for bold and <br> for new lines.
         
-        TONE: Clinical, urgent, professional. 
-        FORMAT: HTML tags only (<h3>, <p>, <b>). No Markdown.
+        REQUIRED OUTPUT FORMAT:
+        <b>INCIDENT SUMMARY:</b><br>
+        [One sentence describing the attack type and time]<br><br>
+        
+        <b>TECHNICAL ANALYSIS:</b><br>
+        [Explain why Entropy {stats.get('entropy_avg')} confirms malicious encryption. Mention the I/O spike.]<br><br>
+        
+        <b>COUNTERMEASURES TAKEN:</b><br>
+        Threat process terminated. Network isolation protocols engaged. System snapshot restored.
         """
 
+        # 3. Call the AI
         chat_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                }
+            ],
+            # Use Llama 3.3 for the best results, or 3.1-70b if 3.3 is unavailable
+            model="llama-3.3-70b-versatile",
+            temperature=0.3, # Lower temp keeps the formatting strict
+            max_tokens=1024, 
         )
+
         return chat_completion.choices[0].message.content
 
     except Exception as e:
-        return f"<h3>CONNECTION ERROR</h3><p>Forensic AI Offline: {e}</p>"
+        # Fallback Logic (Returns HTML error message)
+        return f"<b>⚠ UPLINK ERROR:</b><br>Could not reach Neural Net.<br><i>Error: {str(e)}</i>"
